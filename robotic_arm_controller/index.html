@@ -1,0 +1,1917 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8"/>
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+
+<title>FYP-2209 · Defect Detection Control</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@300;400;600;700;900&family=Barlow:wght@300;400;500&display=swap" rel="stylesheet"/>
+
+<style>
+
+/* ══════════════════════════════════════════════
+
+   DESIGN: Industrial HMI — dark steel + amber
+
+   Inspired by factory control panels & SCADA UIs
+
+══════════════════════════════════════════════ */
+
+:root{
+
+  --bg-base:    #0a0c0f;
+
+  --bg-panel:   #0f1318;
+
+  --bg-card:    #141920;
+
+  --bg-input:   #0d1016;
+
+  --border:     #1e2730;
+
+  --border-lit: #2a3a4a;
+
+  --amber:      #f5a623;
+
+  --amber-dim:  #7a5110;
+
+  --amber-glow: rgba(245,166,35,0.18);
+
+  --green:      #00e676;
+
+  --green-dim:  #004d26;
+
+  --red:        #ff3d3d;
+
+  --red-dim:    #4d0000;
+
+  --cyan:       #00bcd4;
+
+  --text-hi:    #e8edf2;
+
+  --text-mid:   #8a9ab0;
+
+  --text-lo:    #3a4a5a;
+
+  --mono:       'Share Tech Mono', monospace;
+
+  --head:       'Barlow Condensed', sans-serif;
+
+  --body:       'Barlow', sans-serif;
+
+}
+
+
+
+*{margin:0;padding:0;box-sizing:border-box}
+
+
+
+body{
+
+  background:var(--bg-base);
+
+  color:var(--text-hi);
+
+  font-family:var(--body);
+
+  min-height:100vh;
+
+  overflow-x:hidden;
+
+}
+
+
+
+/* Scanline overlay */
+
+body::before{
+
+  content:'';
+
+  position:fixed;
+
+  inset:0;
+
+  background:repeating-linear-gradient(
+
+    0deg,
+
+    transparent,
+
+    transparent 2px,
+
+    rgba(0,0,0,0.07) 2px,
+
+    rgba(0,0,0,0.07) 4px
+
+  );
+
+  pointer-events:none;
+
+  z-index:999;
+
+}
+
+
+
+/* ── Header ─────────────────────────────────── */
+
+header{
+
+  display:flex;
+
+  align-items:center;
+
+  justify-content:space-between;
+
+  padding:14px 28px;
+
+  background:var(--bg-panel);
+
+  border-bottom:1px solid var(--border);
+
+  position:sticky;
+
+  top:0;
+
+  z-index:100;
+
+}
+
+.logo{
+
+  display:flex;
+
+  align-items:baseline;
+
+  gap:10px;
+
+}
+
+.logo-mark{
+
+  font-family:var(--head);
+
+  font-weight:900;
+
+  font-size:1.9rem;
+
+  letter-spacing:2px;
+
+  color:var(--amber);
+
+  text-shadow:0 0 20px var(--amber-glow);
+
+}
+
+.logo-sub{
+
+  font-family:var(--mono);
+
+  font-size:.7rem;
+
+  color:var(--text-mid);
+
+  letter-spacing:3px;
+
+  text-transform:uppercase;
+
+}
+
+.header-status{
+
+  display:flex;
+
+  align-items:center;
+
+  gap:20px;
+
+}
+
+.pill{
+
+  display:flex;
+
+  align-items:center;
+
+  gap:6px;
+
+  padding:5px 12px;
+
+  border-radius:3px;
+
+  background:var(--bg-card);
+
+  border:1px solid var(--border);
+
+  font-family:var(--mono);
+
+  font-size:.72rem;
+
+  letter-spacing:1px;
+
+}
+
+.pill .dot{
+
+  width:7px;
+
+  height:7px;
+
+  border-radius:50%;
+
+  background:var(--text-lo);
+
+}
+
+.pill.ok .dot{background:var(--green);box-shadow:0 0 8px var(--green)}
+
+.pill.err .dot{background:var(--red);box-shadow:0 0 8px var(--red)}
+
+
+
+/* ── Layout ──────────────────────────────────── */
+
+.main-grid{
+
+  display:grid;
+
+  grid-template-columns:1fr 380px;
+
+  grid-template-rows:auto auto;
+
+  gap:14px;
+
+  padding:14px 18px;
+
+  max-width:1440px;
+
+  margin:0 auto;
+
+}
+
+
+
+/* ── Panel base ──────────────────────────────── */
+
+.panel{
+
+  background:var(--bg-panel);
+
+  border:1px solid var(--border);
+
+  border-radius:4px;
+
+  overflow:hidden;
+
+}
+
+.panel-header{
+
+  display:flex;
+
+  align-items:center;
+
+  justify-content:space-between;
+
+  padding:8px 14px;
+
+  background:var(--bg-card);
+
+  border-bottom:1px solid var(--border);
+
+}
+
+.panel-title{
+
+  font-family:var(--head);
+
+  font-weight:600;
+
+  font-size:.95rem;
+
+  letter-spacing:3px;
+
+  text-transform:uppercase;
+
+  color:var(--text-mid);
+
+}
+
+.panel-body{padding:14px}
+
+
+
+/* ── Camera feed ─────────────────────────────── */
+
+.camera-panel{grid-column:1;grid-row:1}
+
+.feed-wrap{
+
+  position:relative;
+
+  background:#000;
+
+  aspect-ratio:4/3;
+
+  border:1px solid var(--border);
+
+}
+
+.feed-wrap img{
+
+  width:100%;
+
+  height:100%;
+
+  object-fit:cover;
+
+  display:block;
+
+}
+
+.verdict-overlay{
+
+  position:absolute;
+
+  top:12px;
+
+  right:12px;
+
+  padding:6px 18px;
+
+  font-family:var(--head);
+
+  font-weight:900;
+
+  font-size:1.6rem;
+
+  letter-spacing:4px;
+
+  border-radius:3px;
+
+  backdrop-filter:blur(4px);
+
+  transition:all .3s;
+
+}
+
+.verdict-PASS  {background:rgba(0,230,118,.15);border:1px solid var(--green);color:var(--green);text-shadow:0 0 12px var(--green)}
+
+.verdict-REJECT{background:rgba(255,61,61,.15);border:1px solid var(--red);  color:var(--red);  text-shadow:0 0 12px var(--red)}
+
+.verdict-WAITING{background:rgba(138,154,176,.1);border:1px solid var(--border);color:var(--text-mid)}
+
+
+
+.feed-footer{
+
+  display:flex;
+
+  align-items:center;
+
+  justify-content:space-between;
+
+  padding:7px 12px;
+
+  background:var(--bg-card);
+
+  border-top:1px solid var(--border);
+
+  font-family:var(--mono);
+
+  font-size:.72rem;
+
+  color:var(--text-mid);
+
+}
+
+.detections-list{
+
+  display:flex;
+
+  flex-wrap:wrap;
+
+  gap:5px;
+
+  padding:10px 14px;
+
+  min-height:36px;
+
+}
+
+.det-tag{
+
+  padding:2px 9px;
+
+  border-radius:2px;
+
+  font-family:var(--mono);
+
+  font-size:.68rem;
+
+  border:1px solid;
+
+  transition:opacity .3s;
+
+}
+
+.det-PASS  {border-color:var(--green);color:var(--green);background:rgba(0,230,118,.08)}
+
+.det-REJECT{border-color:var(--red);  color:var(--red);  background:rgba(255,61,61,.08)}
+
+
+
+/* ── Stats panel ─────────────────────────────── */
+
+.stats-panel{grid-column:2;grid-row:1}
+
+.stat-row{
+
+  display:flex;
+
+  justify-content:space-between;
+
+  align-items:baseline;
+
+  padding:9px 0;
+
+  border-bottom:1px solid var(--border);
+
+}
+
+.stat-row:last-child{border:0}
+
+.stat-label{font-family:var(--mono);font-size:.7rem;color:var(--text-mid);letter-spacing:1px}
+
+.stat-value{font-family:var(--head);font-weight:700;font-size:1.5rem;letter-spacing:1px}
+
+.stat-value.green{color:var(--green)}
+
+.stat-value.red  {color:var(--red)}
+
+.stat-value.amber{color:var(--amber)}
+
+
+
+/* Mini bar chart */
+
+.label-bars{display:flex;flex-direction:column;gap:5px;margin-top:10px}
+
+.bar-row{display:flex;align-items:center;gap:8px}
+
+.bar-name{font-family:var(--mono);font-size:.65rem;color:var(--text-mid);width:80px;flex-shrink:0}
+
+.bar-track{flex:1;height:8px;background:var(--border);border-radius:2px;overflow:hidden}
+
+.bar-fill{height:100%;background:var(--amber);border-radius:2px;transition:width .6s ease;min-width:2px}
+
+.bar-count{font-family:var(--mono);font-size:.65rem;color:var(--text-mid);width:30px;text-align:right}
+
+
+
+/* Auto mode button */
+
+.btn-auto{
+
+  width:100%;
+
+  margin-top:14px;
+
+  padding:14px;
+
+  border:none;
+
+  cursor:pointer;
+
+  font-family:var(--head);
+
+  font-weight:700;
+
+  font-size:1.1rem;
+
+  letter-spacing:4px;
+
+  text-transform:uppercase;
+
+  border-radius:3px;
+
+  transition:all .25s;
+
+  position:relative;
+
+  overflow:hidden;
+
+}
+
+.btn-auto.off{
+
+  background:var(--amber-glow);
+
+  border:1px solid var(--amber-dim);
+
+  color:var(--amber);
+
+}
+
+.btn-auto.off:hover{
+
+  background:rgba(245,166,35,.28);
+
+  box-shadow:0 0 24px var(--amber-glow);
+
+}
+
+.btn-auto.on{
+
+  background:rgba(255,61,61,.15);
+
+  border:1px solid var(--red);
+
+  color:var(--red);
+
+  animation:pulse-red 2s infinite;
+
+}
+
+@keyframes pulse-red{
+
+  0%,100%{box-shadow:0 0 8px rgba(255,61,61,.4)}
+
+  50%    {box-shadow:0 0 20px rgba(255,61,61,.7)}
+
+}
+
+
+
+.btn-reset{
+
+  width:100%;
+
+  margin-top:8px;
+
+  padding:7px;
+
+  border:1px solid var(--border-lit);
+
+  background:transparent;
+
+  cursor:pointer;
+
+  font-family:var(--mono);
+
+  font-size:.7rem;
+
+  letter-spacing:2px;
+
+  color:var(--text-mid);
+
+  border-radius:2px;
+
+  transition:all .2s;
+
+}
+
+.btn-reset:hover{color:var(--text-hi);border-color:var(--text-mid)}
+
+
+
+/* ── Servo panel ─────────────────────────────── */
+
+.servo-panel{grid-column:1;grid-row:2}
+
+.servo-grid{
+
+  display:grid;
+
+  grid-template-columns:repeat(3,1fr);
+
+  gap:12px;
+
+}
+
+.servo-card{
+
+  background:var(--bg-card);
+
+  border:1px solid var(--border);
+
+  border-radius:3px;
+
+  padding:12px 14px;
+
+  position:relative;
+
+}
+
+.servo-card::before{
+
+  content:'';
+
+  position:absolute;
+
+  top:0;left:0;right:0;
+
+  height:2px;
+
+  background:linear-gradient(90deg,var(--amber),transparent);
+
+  opacity:0.6;
+
+}
+
+.servo-head{
+
+  display:flex;
+
+  justify-content:space-between;
+
+  align-items:baseline;
+
+  margin-bottom:10px;
+
+}
+
+.servo-name{
+
+  font-family:var(--head);
+
+  font-weight:600;
+
+  font-size:.85rem;
+
+  letter-spacing:2px;
+
+  color:var(--text-mid);
+
+}
+
+.servo-type{
+
+  font-family:var(--mono);
+
+  font-size:.6rem;
+
+  color:var(--text-lo);
+
+  letter-spacing:1px;
+
+}
+
+.servo-angle-display{
+
+  font-family:var(--mono);
+
+  font-size:1.5rem;
+
+  color:var(--amber);
+
+  text-align:center;
+
+  margin-bottom:8px;
+
+  text-shadow:0 0 10px var(--amber-glow);
+
+  letter-spacing:2px;
+
+}
+
+
+
+/* Custom range slider */
+
+input[type=range]{
+
+  -webkit-appearance:none;
+
+  appearance:none;
+
+  width:100%;
+
+  height:4px;
+
+  background:var(--border-lit);
+
+  border-radius:2px;
+
+  outline:none;
+
+  cursor:pointer;
+
+}
+
+input[type=range]::-webkit-slider-thumb{
+
+  -webkit-appearance:none;
+
+  appearance:none;
+
+  width:16px;
+
+  height:16px;
+
+  background:var(--amber);
+
+  border-radius:50%;
+
+  box-shadow:0 0 6px var(--amber-glow);
+
+  transition:box-shadow .15s;
+
+}
+
+input[type=range]::-webkit-slider-thumb:hover{
+
+  box-shadow:0 0 14px rgba(245,166,35,.5);
+
+}
+
+input[type=range]::-moz-range-thumb{
+
+  width:16px;height:16px;
+
+  background:var(--amber);
+
+  border:none;border-radius:50%;
+
+}
+
+
+
+/* ── Pose panel ──────────────────────────────── */
+
+.pose-panel{grid-column:2;grid-row:2}
+
+.pose-section{margin-bottom:16px}
+
+.pose-section-title{
+
+  font-family:var(--mono);
+
+  font-size:.65rem;
+
+  letter-spacing:3px;
+
+  text-transform:uppercase;
+
+  color:var(--text-lo);
+
+  margin-bottom:8px;
+
+  padding-bottom:4px;
+
+  border-bottom:1px solid var(--border);
+
+}
+
+.pose-row{
+
+  display:flex;
+
+  align-items:center;
+
+  gap:8px;
+
+  margin-bottom:6px;
+
+}
+
+.pose-name-badge{
+
+  font-family:var(--mono);
+
+  font-size:.7rem;
+
+  color:var(--amber);
+
+  background:rgba(245,166,35,.1);
+
+  border:1px solid var(--amber-dim);
+
+  padding:3px 10px;
+
+  border-radius:2px;
+
+  width:90px;
+
+  text-align:center;
+
+  flex-shrink:0;
+
+}
+
+.pose-angles-display{
+
+  flex:1;
+
+  font-family:var(--mono);
+
+  font-size:.62rem;
+
+  color:var(--text-lo);
+
+  white-space:nowrap;
+
+  overflow:hidden;
+
+  text-overflow:ellipsis;
+
+}
+
+.btn-sm{
+
+  padding:4px 10px;
+
+  border-radius:2px;
+
+  border:1px solid var(--border-lit);
+
+  background:var(--bg-input);
+
+  color:var(--text-mid);
+
+  font-family:var(--mono);
+
+  font-size:.65rem;
+
+  letter-spacing:1px;
+
+  cursor:pointer;
+
+  transition:all .18s;
+
+  white-space:nowrap;
+
+}
+
+.btn-sm:hover{border-color:var(--amber);color:var(--amber)}
+
+.btn-sm.go{border-color:var(--cyan);color:var(--cyan)}
+
+.btn-sm.go:hover{background:rgba(0,188,212,.12)}
+
+
+
+/* Save / Load row */
+
+.save-row{
+
+  display:flex;
+
+  gap:8px;
+
+  margin-top:10px;
+
+}
+
+.btn-save{
+
+  flex:1;
+
+  padding:9px;
+
+  border:1px solid var(--green-dim);
+
+  background:rgba(0,230,118,.06);
+
+  color:var(--green);
+
+  font-family:var(--mono);
+
+  font-size:.72rem;
+
+  letter-spacing:2px;
+
+  border-radius:2px;
+
+  cursor:pointer;
+
+  transition:all .2s;
+
+}
+
+.btn-save:hover{background:rgba(0,230,118,.15);box-shadow:0 0 12px rgba(0,230,118,.2)}
+
+.btn-load{
+
+  flex:1;
+
+  padding:9px;
+
+  border:1px solid var(--border-lit);
+
+  background:var(--bg-input);
+
+  color:var(--text-mid);
+
+  font-family:var(--mono);
+
+  font-size:.72rem;
+
+  letter-spacing:2px;
+
+  border-radius:2px;
+
+  cursor:pointer;
+
+  transition:all .2s;
+
+}
+
+.btn-load:hover{border-color:var(--cyan);color:var(--cyan)}
+
+
+
+/* Serial log */
+
+.serial-log{
+
+  background:var(--bg-input);
+
+  border:1px solid var(--border);
+
+  border-radius:2px;
+
+  padding:8px;
+
+  height:110px;
+
+  overflow-y:auto;
+
+  font-family:var(--mono);
+
+  font-size:.62rem;
+
+  color:var(--text-lo);
+
+  line-height:1.6;
+
+}
+
+.serial-log .tx{color:#4a8a6a}
+
+.serial-log .rx{color:#4a6a8a}
+
+
+
+/* Toast */
+
+#toast{
+
+  position:fixed;
+
+  bottom:24px;
+
+  right:24px;
+
+  padding:10px 20px;
+
+  background:var(--bg-card);
+
+  border:1px solid var(--border-lit);
+
+  border-radius:3px;
+
+  font-family:var(--mono);
+
+  font-size:.72rem;
+
+  color:var(--text-hi);
+
+  opacity:0;
+
+  transform:translateY(10px);
+
+  transition:all .3s;
+
+  z-index:200;
+
+  pointer-events:none;
+
+}
+
+#toast.show{opacity:1;transform:translateY(0)}
+
+
+
+/* Arm busy indicator */
+
+.arm-busy-bar{
+
+  height:3px;
+
+  background:linear-gradient(90deg,var(--amber),var(--red),var(--amber));
+
+  background-size:200% 100%;
+
+  animation:slide 1.5s linear infinite;
+
+  display:none;
+
+}
+
+.arm-busy-bar.active{display:block}
+
+@keyframes slide{
+
+  0%{background-position:100% 0}
+
+  100%{background-position:-100% 0}
+
+}
+
+
+
+/* Scrollbar */
+
+::-webkit-scrollbar{width:4px;height:4px}
+
+::-webkit-scrollbar-track{background:var(--bg-base)}
+
+::-webkit-scrollbar-thumb{background:var(--border-lit);border-radius:2px}
+
+::-webkit-scrollbar-thumb:hover{background:var(--amber-dim)}
+
+</style>
+
+</head>
+
+<body>
+
+
+
+<!-- ── Header ─────────────────────────────────────── -->
+
+<header>
+
+  <div class="logo">
+
+    <span class="logo-mark">FYP-2209</span>
+
+    <span class="logo-sub">Defect Detection &amp; Sorting System</span>
+
+  </div>
+
+  <div class="header-status">
+
+    <div class="pill" id="pill-serial">
+
+      <div class="dot"></div>
+
+      <span id="serial-text">SERIAL: —</span>
+
+    </div>
+
+    <div class="pill" id="pill-mode">
+
+      <div class="dot" style="background:var(--text-lo)"></div>
+
+      <span id="mode-text">MANUAL</span>
+
+    </div>
+
+    <div class="pill">
+
+      <div class="dot" style="background:var(--cyan);box-shadow:0 0 8px var(--cyan)"></div>
+
+      <span id="fps-text">FPS: —</span>
+
+    </div>
+
+  </div>
+
+</header>
+
+
+
+<div class="arm-busy-bar" id="busy-bar"></div>
+
+
+
+<div class="main-grid">
+
+
+
+  <!-- ── Camera feed ───────────────────────── -->
+
+  <div class="panel camera-panel">
+
+    <div class="panel-header">
+
+      <span class="panel-title">VISION FEED</span>
+
+      <span class="panel-title" style="font-size:.7rem;color:var(--text-lo)" id="cam-res">640×480</span>
+
+    </div>
+
+    <div class="panel-body" style="padding:0">
+
+      <div class="feed-wrap">
+
+        <img src="/video_feed" id="feed-img" alt="camera"/>
+
+        <div class="verdict-overlay verdict-WAITING" id="verdict-badge">WAITING</div>
+
+      </div>
+
+      <div class="detections-list" id="det-list">
+
+        <span style="font-family:var(--mono);font-size:.65rem;color:var(--text-lo)">No detections</span>
+
+      </div>
+
+      <div class="feed-footer">
+
+        <span id="det-summary">Waiting for frames…</span>
+
+        <span id="time-display"></span>
+
+      </div>
+
+    </div>
+
+  </div>
+
+
+
+  <!-- ── Stats ────────────────────────────── -->
+
+  <div class="panel stats-panel">
+
+    <div class="panel-header">
+
+      <span class="panel-title">PRODUCTION STATS</span>
+
+    </div>
+
+    <div class="panel-body">
+
+      <div class="stat-row">
+
+        <span class="stat-label">TOTAL PASS</span>
+
+        <span class="stat-value green" id="stat-pass">0</span>
+
+      </div>
+
+      <div class="stat-row">
+
+        <span class="stat-label">TOTAL REJECT</span>
+
+        <span class="stat-value red" id="stat-reject">0</span>
+
+      </div>
+
+      <div class="stat-row">
+
+        <span class="stat-label">YIELD RATE</span>
+
+        <span class="stat-value amber" id="stat-yield">—</span>
+
+      </div>
+
+
+
+      <div style="margin-top:12px">
+
+        <div class="pose-section-title">LABEL DETECTION COUNTS</div>
+
+        <div class="label-bars" id="label-bars">
+
+          <!-- Generated by JS -->
+
+        </div>
+
+      </div>
+
+
+
+      <button class="btn-auto off" id="btn-auto" onclick="toggleAuto()">
+
+        ▶ START AUTO MODE
+
+      </button>
+
+      <button class="btn-reset" onclick="resetStats()">RESET COUNTERS</button>
+
+    </div>
+
+  </div>
+
+
+
+  <!-- ── Servo sliders ─────────────────────── -->
+
+  <div class="panel servo-panel">
+
+    <div class="panel-header">
+
+      <span class="panel-title">JOINT CONTROL</span>
+
+      <span class="panel-title" style="font-size:.65rem;color:var(--text-lo)">DRAG TO JOG</span>
+
+    </div>
+
+    <div class="panel-body">
+
+      <div class="servo-grid" id="servo-grid">
+
+        <!-- Built by JS -->
+
+      </div>
+
+    </div>
+
+  </div>
+
+
+
+  <!-- ── Pose panel ──────────────────────── -->
+
+  <div class="panel pose-panel">
+
+    <div class="panel-header">
+
+      <span class="panel-title">POSE LIBRARY</span>
+
+    </div>
+
+    <div class="panel-body">
+
+
+
+      <div class="pose-section">
+
+        <div class="pose-section-title">NAMED POSITIONS</div>
+
+        <div id="pose-rows"><!-- Built by JS --></div>
+
+      </div>
+
+
+
+      <div class="pose-section">
+
+        <div class="save-row">
+
+          <button class="btn-save" onclick="saveCoords()">💾 SAVE TO DISK</button>
+
+          <button class="btn-load" onclick="loadCoords()">📂 LOAD FROM DISK</button>
+
+        </div>
+
+      </div>
+
+
+
+      <div class="pose-section">
+
+        <div class="pose-section-title">SERIAL LOG</div>
+
+        <div class="serial-log" id="serial-log">Waiting for connection…</div>
+
+      </div>
+
+
+
+    </div>
+
+  </div>
+
+
+
+</div><!-- end main-grid -->
+
+
+
+<div id="toast"></div>
+
+
+
+<script>
+
+// ═══════════════════════════════════════════════════════
+
+//  State
+
+// ═══════════════════════════════════════════════════════
+
+const SERVO_DEFS = [
+
+  {name:'BASE',    ch:0, type:'MG996R'},
+
+  {name:'SHOULDER',ch:1, type:'MG996R'},
+
+  {name:'ELBOW',   ch:2, type:'MG996R'},
+
+  {name:'WRIST-R', ch:3, type:'SG90'},
+
+  {name:'WRIST-U', ch:4, type:'SG90'},
+
+  {name:'GRIPPER', ch:5, type:'SG90'},
+
+];
+
+
+
+const POSES = ['home','pick','reject_box'];
+
+
+
+let angles   = [90,90,90,90,90,90];
+
+let autoMode = false;
+
+let sendTimer = null;
+
+
+
+// ═══════════════════════════════════════════════════════
+
+//  Build Servo Sliders
+
+// ═══════════════════════════════════════════════════════
+
+function buildServoGrid(){
+  const grid = document.getElementById('servo-grid');
+  grid.innerHTML = '';
+  SERVO_DEFS.forEach((s,i)=>{
+    
+    // Sirf yahan logic change ki hai: Gripper ke liye 90, baqi sab ke liye 180
+    const maxVal = (s.name === 'GRIPPER') ? 90 : 180;
+
+    grid.innerHTML += `
+    <div class="servo-card">
+      <div class="servo-head">
+        <span class="servo-name">${s.name}</span>
+        <span class="servo-type">${s.type} · CH${s.ch}</span>
+      </div>
+      <div class="servo-angle-display" id="disp-${i}">90°</div>
+      <input type="range" min="0" max="${maxVal}" value="90" id="slider-${i}"
+             oninput="onSlider(${i},this.value)"/>
+    </div>`;
+  });
+}
+
+
+function onSlider(i, val){
+
+  val = parseInt(val);
+
+  angles[i] = val;
+
+  document.getElementById(`disp-${i}`).textContent = val + '°';
+
+  // Debounce serial sends to 80 ms
+
+  clearTimeout(sendTimer);
+
+  sendTimer = setTimeout(sendAngles, 80);
+
+}
+
+
+
+function sendAngles(){
+
+  fetch('/api/set_angles',{
+
+    method:'POST',
+
+    headers:{'Content-Type':'application/json'},
+
+    body:JSON.stringify({angles})
+
+  }).catch(()=>{});
+
+}
+
+
+
+function updateSliders(newAngles){
+
+  newAngles.forEach((a,i)=>{
+
+    const sl = document.getElementById(`slider-${i}`);
+
+    const dp = document.getElementById(`disp-${i}`);
+
+    if(sl && document.activeElement !== sl){
+
+      sl.value = a;
+
+      dp.textContent = a + '°';
+
+    }
+
+  });
+
+}
+
+
+
+// ═══════════════════════════════════════════════════════
+
+//  Build Pose Rows
+
+// ═══════════════════════════════════════════════════════
+
+function buildPoseRows(){
+
+  const el = document.getElementById('pose-rows');
+
+  el.innerHTML = '';
+
+  POSES.forEach(p=>{
+
+    el.innerHTML += `
+
+    <div class="pose-row">
+
+      <div class="pose-name-badge">${p.replace('_',' ').toUpperCase()}</div>
+
+      <div class="pose-angles-display" id="pose-disp-${p}">—</div>
+
+      <button class="btn-sm" onclick="recordPose('${p}')">REC</button>
+
+      <button class="btn-sm go" onclick="goPose('${p}')">GO</button>
+
+    </div>`;
+
+  });
+
+}
+
+
+
+function updatePoseDisplays(coords){
+
+  POSES.forEach(p=>{
+
+    const el = document.getElementById(`pose-disp-${p}`);
+
+    if(el && coords[p]) el.textContent = coords[p].join(',');
+
+  });
+
+}
+
+
+
+async function recordPose(pose){
+
+  const r = await fetch('/api/record_pose',{
+
+    method:'POST',
+
+    headers:{'Content-Type':'application/json'},
+
+    body:JSON.stringify({pose})
+
+  });
+
+  const d = await r.json();
+
+  if(d.ok){ toast(`✓ Recorded ${pose.toUpperCase()}`,'green'); }
+
+  else     { toast(`✗ ${d.error}`,'red'); }
+
+}
+
+
+
+async function goPose(pose){
+
+  const r = await fetch('/api/go_pose',{
+
+    method:'POST',
+
+    headers:{'Content-Type':'application/json'},
+
+    body:JSON.stringify({pose})
+
+  });
+
+  const d = await r.json();
+
+  if(d.ok){ toast(`→ Moving to ${pose.toUpperCase()}`,'cyan'); updateSliders(d.angles); }
+
+}
+
+
+
+async function saveCoords(){
+
+  const r = await fetch('/api/save_coords',{method:'POST'});
+
+  const d = await r.json();
+
+  toast(d.ok ? '💾 Saved to disk':'✗ Save failed', d.ok?'green':'red');
+
+}
+
+
+
+async function loadCoords(){
+
+  const r = await fetch('/api/load_coords',{method:'POST'});
+
+  const d = await r.json();
+
+  if(d.ok){ updatePoseDisplays(d.coords); toast('📂 Loaded from disk','cyan'); }
+
+}
+
+
+
+// ═══════════════════════════════════════════════════════
+
+//  Auto Mode
+
+// ═══════════════════════════════════════════════════════
+
+async function toggleAuto(){
+
+  autoMode = !autoMode;
+
+  const r = await fetch('/api/auto_mode',{
+
+    method:'POST',
+
+    headers:{'Content-Type':'application/json'},
+
+    body:JSON.stringify({enable:autoMode})
+
+  });
+
+  const d = await r.json();
+
+  autoMode = d.auto_mode;
+
+  updateAutoBtn();
+
+  toast(autoMode ? '▶ AUTO MODE ACTIVE':'⏹ MANUAL MODE', autoMode?'amber':'cyan');
+
+}
+
+
+
+function updateAutoBtn(){
+
+  const btn = document.getElementById('btn-auto');
+
+  const pill = document.getElementById('pill-mode');
+
+  const modeText = document.getElementById('mode-text');
+
+  if(autoMode){
+
+    btn.className='btn-auto on';
+
+    btn.textContent='⏹ STOP AUTO MODE';
+
+    pill.classList.add('err');
+
+    modeText.textContent='AUTO';
+
+  } else {
+
+    btn.className='btn-auto off';
+
+    btn.textContent='▶ START AUTO MODE';
+
+    pill.classList.remove('err');
+
+    modeText.textContent='MANUAL';
+
+  }
+
+}
+
+
+
+async function resetStats(){
+
+  await fetch('/api/reset_stats',{method:'POST'});
+
+  toast('Counters reset','cyan');
+
+}
+
+
+
+// ═══════════════════════════════════════════════════════
+
+//  Label Bar Chart
+
+// ═══════════════════════════════════════════════════════
+
+const ALL_LABELS = ['Full','Underfilled','Overfilled','Cap','Label','Deformed'];
+
+let maxCount = 1;
+
+
+
+function updateLabelBars(counts){
+
+  const vals = ALL_LABELS.map(l => counts[l] || 0);
+
+  maxCount = Math.max(1, ...vals);
+
+  const el = document.getElementById('label-bars');
+
+  el.innerHTML = ALL_LABELS.map((l,i) => {
+
+    const w = (vals[i]/maxCount*100).toFixed(1);
+
+    return `<div class="bar-row">
+
+      <div class="bar-name">${l}</div>
+
+      <div class="bar-track"><div class="bar-fill" style="width:${w}%"></div></div>
+
+      <div class="bar-count">${vals[i]}</div>
+
+    </div>`;
+
+  }).join('');
+
+}
+
+
+
+// ═══════════════════════════════════════════════════════
+
+//  Verdict badge
+
+// ═══════════════════════════════════════════════════════
+
+let lastVerdict = '';
+
+function updateVerdict(v){
+
+  if(v === lastVerdict) return;
+
+  lastVerdict = v;
+
+  const el = document.getElementById('verdict-badge');
+
+  el.className = `verdict-overlay verdict-${v}`;
+
+  el.textContent = v;
+
+}
+
+
+
+// ═══════════════════════════════════════════════════════
+
+//  Detection tags
+
+// ═══════════════════════════════════════════════════════
+
+const PASS_LABELS_SET = new Set(['Full','Cap','Label']);
+
+function updateDetections(dets){
+
+  const el = document.getElementById('det-list');
+
+  if(!dets.length){
+
+    el.innerHTML = '<span style="font-family:var(--mono);font-size:.65rem;color:var(--text-lo)">No detections</span>';
+
+    document.getElementById('det-summary').textContent = 'No objects in frame';
+
+    return;
+
+  }
+
+  el.innerHTML = dets.map(d=>{
+
+    const cls = PASS_LABELS_SET.has(d.label) ? 'PASS':'REJECT';
+
+    return `<span class="det-tag det-${cls}">${d.label} ${(d.conf*100).toFixed(0)}%</span>`;
+
+  }).join('');
+
+  document.getElementById('det-summary').textContent =
+
+    `${dets.length} detection${dets.length>1?'s':''} · ${new Date().toLocaleTimeString()}`;
+
+}
+
+
+
+// ═══════════════════════════════════════════════════════
+
+//  Serial log
+
+// ═══════════════════════════════════════════════════════
+
+let lastSerialLen = 0;
+
+function updateSerialLog(lines){
+
+  if(lines.length === lastSerialLen) return;
+
+  lastSerialLen = lines.length;
+
+  const el = document.getElementById('serial-log');
+
+  el.innerHTML = lines.map(l=>{
+
+    const cls = l.startsWith('TX') ? 'tx' : l.startsWith('RX') ? 'rx' : '';
+
+    return `<div class="${cls}">${escHtml(l)}</div>`;
+
+  }).join('');
+
+  el.scrollTop = el.scrollHeight;
+
+}
+
+function escHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
+
+
+
+// ═══════════════════════════════════════════════════════
+
+//  Status poll
+
+// ═══════════════════════════════════════════════════════
+
+async function poll(){
+
+  try{
+
+    const r = await fetch('/api/status');
+
+    const d = await r.json();
+
+
+
+    // Verdict
+
+    updateVerdict(d.verdict);
+
+
+
+    // Detections
+
+    updateDetections(d.detections);
+
+
+
+    // Sliders (only if not dragging)
+
+    if(document.activeElement?.type !== 'range'){
+
+      updateSliders(d.angles);
+
+      angles = d.angles;
+
+    }
+
+
+
+    // Stats
+
+    document.getElementById('stat-pass').textContent   = d.pass_count;
+
+    document.getElementById('stat-reject').textContent = d.reject_count;
+
+    const total = d.pass_count + d.reject_count;
+
+    document.getElementById('stat-yield').textContent  =
+
+      total>0 ? (d.pass_count/total*100).toFixed(1)+'%' : '—';
+
+
+
+    // Label bars
+
+    updateLabelBars(d.detection_counts);
+
+
+
+    // Auto mode sync
+
+    if(autoMode !== d.auto_mode){ autoMode = d.auto_mode; updateAutoBtn(); }
+
+
+
+    // Busy bar
+
+    document.getElementById('busy-bar').classList.toggle('active', d.arm_busy);
+
+
+
+    // Serial
+
+    const sp = document.getElementById('pill-serial');
+
+    const st = document.getElementById('serial-text');
+
+    if(d.serial_connected){ sp.classList.add('ok'); sp.classList.remove('err'); st.textContent='SERIAL: OK'; }
+
+    else                   { sp.classList.remove('ok'); sp.classList.add('err'); st.textContent='SERIAL: ERR'; }
+
+
+
+    // FPS
+
+    document.getElementById('fps-text').textContent = `FPS: ${d.fps.toFixed(0)}`;
+
+
+
+    // Pose displays
+
+    updatePoseDisplays(d.coords);
+
+
+
+    // Serial log
+
+    updateSerialLog(d.serial_log);
+
+
+
+  } catch(e){ /* network hiccup — ignore */ }
+
+}
+
+
+
+// ═══════════════════════════════════════════════════════
+
+//  Clock
+
+// ═══════════════════════════════════════════════════════
+
+function updateClock(){
+
+  document.getElementById('time-display').textContent = new Date().toLocaleTimeString();
+
+}
+
+
+
+// ═══════════════════════════════════════════════════════
+
+//  Toast notification
+
+// ═══════════════════════════════════════════════════════
+
+let toastTimer = null;
+
+function toast(msg, color='amber'){
+
+  const el = document.getElementById('toast');
+
+  const colors = {green:'var(--green)',red:'var(--red)',amber:'var(--amber)',cyan:'var(--cyan)'};
+
+  el.style.borderColor = colors[color] || colors.amber;
+
+  el.style.color = colors[color] || colors.amber;
+
+  el.textContent = msg;
+
+  el.classList.add('show');
+
+  clearTimeout(toastTimer);
+
+  toastTimer = setTimeout(()=>el.classList.remove('show'), 2800);
+
+}
+
+
+
+// ═══════════════════════════════════════════════════════
+
+//  Init
+
+// ═══════════════════════════════════════════════════════
+
+buildServoGrid();
+
+buildPoseRows();
+
+setInterval(poll, 300);
+
+setInterval(updateClock, 1000);
+
+updateClock();
+
+</script>
+
+</body>
+
+</html>
